@@ -54,6 +54,8 @@ class Config
      */
     private $pdfWhitespacesRegex = '[\0\t\n\f\r ]';
 
+    private $ignoreHorizontalOffset = false;
+
     public function getFontSpaceLimit()
     {
         return $this->fontSpaceLimit;
@@ -82,5 +84,13 @@ class Config
     public function setPdfWhitespacesRegex(string $pdfWhitespacesRegex): void
     {
         $this->pdfWhitespacesRegex = $pdfWhitespacesRegex;
+    }
+
+    public function getIgnoreHorizontalOffset(): bool { 
+        return $this->ignoreHorizontalOffset;
+    }
+
+    public function setIgnoreHorizontalOffset(bool $ignore): void {
+        $this->ignoreHorizontalOffset = true;
     }
 }
