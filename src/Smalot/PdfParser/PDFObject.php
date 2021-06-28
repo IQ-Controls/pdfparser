@@ -272,6 +272,8 @@ class PDFObject
     public function getText(Page $page = null)
     {
         $result = '';
+        $positional_text = [ ];
+
         $sections = $this->getSectionsText($this->content);
         $current_font = $this->getDefaultFont($page);
         $clipped_font = $current_font;
@@ -285,6 +287,7 @@ class PDFObject
             $commands = $this->getCommandsText($section);
             $reverse_text = false;
             $text = '';
+            $ty = 0;
 
             foreach ($commands as $command) {
                 switch ($command[self::OPERATOR]) {
@@ -313,8 +316,9 @@ class PDFObject
                             )
                         ) {
                             // horizontal offset
-                            if (!$this->config->getIgnoreHorizontalOffset())
+                            if (!$this->config->getIgnoreHorizontalOffset()) {
                                 $text .= ' ';
+                            }
                         }
                         $current_position_td = ['x' => $x, 'y' => $y];
                         break;
@@ -375,6 +379,8 @@ class PDFObject
                         $args = preg_split('/\s/s', $command[self::COMMAND]);
                         $y = array_pop($args);
                         $x = array_pop($args);
+                        $z = array_pop($args);
+
                         if (false !== $current_position_tm['x']) {
                             $delta = abs((float) $x - (float) ($current_position_tm['x']));
                             if ($delta > 10) {
@@ -387,7 +393,7 @@ class PDFObject
                                 $text .= "\n";
                             }
                         }
-                        $current_position_tm = ['x' => $x, 'y' => $y];
+                        $current_position_tm = ['x' => $x, 'y' => $y, 'z' => $z ];
                         break;
 
                     // set super/subscripting text rise
@@ -420,7 +426,8 @@ class PDFObject
                             // @todo $xobject could be a ElementXRef object, which would then throw an error
                             if (\is_object($xobject) && $xobject instanceof self && !\in_array($xobject->getUniqueId(), self::$recursionStack)) {
                                 // Not a circular reference.
-                                $text .= $xobject->getText($page);
+                                $ref = $xobject->getText($page);
+                                $text .= $ref;
                             }
                         }
                         break;
@@ -471,9 +478,25 @@ class PDFObject
             }
 
             $result .= $text;
+
+            $ty = floatval($current_position_tm['y']);
+            $tz = intval($current_position_tm['z']);
+            if ($tz < 0) {
+                $content = $page->getHeader()->get('MediaBox')->getContent();
+                $position = $content[1]->getContent();
+                $height = $content[3]->getContent();
+                $ty = $height - $ty;
+            }
+
+            $ty = abs($ty); //intval($ty * 1000);
+            if (!isset($positional_text[$ty])) $positional_text[$ty] = '';
+            $positional_text[$ty] .= ($text);
         }
 
         array_pop(self::$recursionStack);
+
+        //krsort($positional_text);
+        //$result = join("", array_values($positional_text));
 
         return $result.' ';
     }
