@@ -43,7 +43,7 @@ use Tests\Smalot\PdfParser\TestCase;
 
 class FontTest extends TestCase
 {
-    public function testGetName()
+    public function testGetName(): void
     {
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
         $parser = $this->getParserInstance();
@@ -54,7 +54,7 @@ class FontTest extends TestCase
         $this->assertEquals('OJHCYD+Cambria,Bold', $font->getName());
     }
 
-    public function testGetType()
+    public function testGetType(): void
     {
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
         $parser = $this->getParserInstance();
@@ -65,7 +65,7 @@ class FontTest extends TestCase
         $this->assertEquals('TrueType', $font->getType());
     }
 
-    public function testGetDetails()
+    public function testGetDetails(): void
     {
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
         $parser = $this->getParserInstance();
@@ -112,7 +112,7 @@ class FontTest extends TestCase
         $this->assertEquals($reference, $font->getDetails());
     }
 
-    public function testTranslateChar()
+    public function testTranslateChar(): void
     {
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
         $parser = $this->getParserInstance();
@@ -136,7 +136,7 @@ class FontTest extends TestCase
      *
      * @see https://github.com/smalot/pdfparser/issues/364
      */
-    public function testTranslateCharIssue364()
+    public function testTranslateCharIssue364(): void
     {
         /*
          * Approach: we provoke the __toString call with a minimal set of input data.
@@ -155,7 +155,7 @@ class FontTest extends TestCase
         $this->assertEquals('?', $font->translateChar('t'));
     }
 
-    public function testLoadTranslateTable()
+    public function testLoadTranslateTable(): void
     {
         $document = new Document();
 
@@ -235,7 +235,7 @@ end';
         $this->assertEquals('y', $table[92]);
     }
 
-    public function testDecodeHexadecimal()
+    public function testDecodeHexadecimal(): void
     {
         $hexa = '<322041>';
         $this->assertEquals('2 A', Font::decodeHexadecimal($hexa));
@@ -273,25 +273,25 @@ al;font-family:Helvetica,sans-serif;font-stretch:normal"><p><span style="font-fa
         $this->assertEquals("\x0\x27\x0\x4c\x0\x56\x0\x53\x0\x52\x0\x51\x0\x4c\x0\x45\x0\x4c\x0\x4f\x0\x4c\x0\x5d\x0\x44\x0\x6f\x0\x6d\x0\x52\x0\x1d\x0\x3\x0\x56\x0\x48\x0\x5b\x0\x57\x0\x44\x0\x10\x0\x49\x0\x48\x0\x4c\x0\x55\x0\x44\x0\xf\x0\x3\x0\x14\x0\x17\x0\x3\x0\x47\x0\x48\x0\x3\x0\x49\x0\x48\x0\x59\x0\x48\x0\x55\x0\x48\x0\x4c\x0\x55\x0\x52\x0\x3\x0\x47\x0\x48\x0\x3\x0\x15\x0\x13\x0\x15\x0\x13", Font::decodeHexadecimal($hexa));
     }
 
-    public function testDecodeOctal()
+    public function testDecodeOctal(): void
     {
         $this->assertEquals('AB C', Font::decodeOctal('\\101\\102\\040\\103'));
         $this->assertEquals('AB CD', Font::decodeOctal('\\101\\102\\040\\103D'));
         $this->assertEquals('AB \199', Font::decodeOctal('\\101\\102\\040\\199'));
     }
 
-    public function testDecodeEntities()
+    public function testDecodeEntities(): void
     {
         $this->assertEquals('File Type', Font::decodeEntities('File#20Type'));
         $this->assertEquals('File# Ty#pe', Font::decodeEntities('File##20Ty#pe'));
     }
 
-    public function testDecodeUnicode()
+    public function testDecodeUnicode(): void
     {
         $this->assertEquals('AB', Font::decodeUnicode("\xFE\xFF\x00A\x00B"));
     }
 
-    public function testDecodeText()
+    public function testDecodeText(): void
     {
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
         $parser = $this->getParserInstance();
@@ -340,14 +340,32 @@ al;font-family:Helvetica,sans-serif;font-stretch:normal"><p><span style="font-fa
             ],
         ];
         $this->assertEquals('æöü', $font->decodeText($commands));
+    }
 
-        $commands = [
-            [
-                't' => '<',
-                'c' => 'C3A6C3B6C3BC', //Unicode encoded string
-            ],
-        ];
-        $this->assertEquals('æöü', $font->decodeText($commands));
+    /**
+     * Font could have indirect encoding without `/Type /Encoding`
+     * which would be instance of PDFObject class (but not Encoding or ElementString).
+     *
+     * @see https://github.com/smalot/pdfparser/pull/500
+     */
+    public function testDecodeTextForFontWithIndirectEncodingWithoutTypeEncoding(): void
+    {
+        $filename = $this->rootDir.'/samples/bugs/PullRequest500.pdf';
+        $parser = $this->getParserInstance();
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page1 = reset($pages);
+        $page1Text = $page1->getText();
+        $expectedText = <<<TEXT
+Export\u{a0}transakční\u{a0}historie
+Typ\u{a0}produktu:\u{a0}Podnikatelský\u{a0}účet\u{a0}Maxi
+Číslo\u{a0}účtu:\u{a0}0000000000/0000
+Počáteční\u{a0}zůstatek: 000\u{a0}000,00\u{a0}Kč
+Konečný\u{a0}zůstatek: 000\u{a0}000,00\u{a0}Kč
+Cena\u{a0}za\u{a0}služby
+TEXT;
+
+        $this->assertEquals($expectedText, trim($page1Text));
     }
 
     /**
@@ -359,7 +377,7 @@ al;font-family:Helvetica,sans-serif;font-stretch:normal"><p><span style="font-fa
      *
      * @doesNotPerformAssertions
      */
-    public function testTriggerGetFontSpaceLimitOnNull()
+    public function testTriggerGetFontSpaceLimitOnNull(): void
     {
         // error is triggered, if we set the fourth parameter to null
         $font = new Font(new Document(), null, null, new Config());
@@ -369,7 +387,7 @@ al;font-family:Helvetica,sans-serif;font-stretch:normal"><p><span style="font-fa
         $font->getTextArray();
     }
 
-    public function testXmlContent()
+    public function testXmlContent(): void
     {
         $filename = $this->rootDir.'/samples/bugs/Issue18.pdf';
         $parser = $this->getParserInstance();
@@ -378,5 +396,39 @@ al;font-family:Helvetica,sans-serif;font-stretch:normal"><p><span style="font-fa
         $text = trim($pages[0]->getText());
 
         $this->assertEquals('Example PDF', $text);
+    }
+
+    /**
+     * Create an instance of Header containing an instance of Encoding that doesn't have a BaseEncoding.
+     * Test if the Font won't raise a exception because Encoding don't have BaseEncoding.
+     */
+    public function testEncodingWithoutBaseEncoding(): void
+    {
+        $document = new Document();
+        $header = new Header(['Encoding' => new Encoding($document)]);
+        $font = new Font(new Document(), $header);
+        $font->setTable([]);
+        $this->assertEquals('?', $font->translateChar('a'));
+    }
+
+    public function testCalculateTextWidth(): void
+    {
+        $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
+        $parser = $this->getParserInstance();
+        $document = $parser->parseFile($filename);
+        $fonts = $document->getFonts();
+
+        $font = $fonts['7_0'];
+        $widths = $font->getDetails()['Widths'];
+        $this->assertEquals($widths[0], $font->calculateTextWidth('D'));
+        $this->assertEquals($widths[10], $font->calculateTextWidth('l'));
+
+        $width = $font->calculateTextWidth('Calibri', $missing);
+        $this->assertEquals(936, $width);
+        $this->assertEquals(['C', 'a', 'b', 'r'], $missing);
+
+        $width = $fonts['9_0']->calculateTextWidth('Calibri', $missing);
+        $this->assertEquals(2573, $width);
+        $this->assertEquals([], $missing);
     }
 }

@@ -56,7 +56,7 @@ class FilterHelper
      *
      * @throws Exception if a certain decode function is not implemented yet
      */
-    public function decodeFilter($filter, $data)
+    public function decodeFilter(string $filter, string $data, int $decodeMemoryLimit = 0): string
     {
         switch ($filter) {
             case 'ASCIIHexDecode':
@@ -69,7 +69,7 @@ class FilterHelper
                 return $this->decodeFilterLZWDecode($data);
 
             case 'FlateDecode':
-                return $this->decodeFilterFlateDecode($data);
+                return $this->decodeFilterFlateDecode($data, $decodeMemoryLimit);
 
             case 'RunLengthDecode':
                 return $this->decodeFilterRunLengthDecode($data);
@@ -97,8 +97,10 @@ class FilterHelper
      * @param string $data Data to decode
      *
      * @return string data string
+     *
+     * @throws Exception
      */
-    protected function decodeFilterASCIIHexDecode($data)
+    protected function decodeFilterASCIIHexDecode(string $data): string
     {
         // all white-space characters shall be ignored
         $data = preg_replace('/[\s]/', '', $data);
@@ -138,8 +140,10 @@ class FilterHelper
      * @param string $data Data to decode
      *
      * @return string data string
+     *
+     * @throws Exception
      */
-    protected function decodeFilterASCII85Decode($data)
+    protected function decodeFilterASCII85Decode(string $data): string
     {
         // initialize string to return
         $decoded = '';
@@ -220,11 +224,14 @@ class FilterHelper
      *
      * Decompresses data encoded using the zlib/deflate compression method, reproducing the original text or binary data.
      *
-     * @param string $data Data to decode
+     * @param string $data              Data to decode
+     * @param int    $decodeMemoryLimit Memory limit on deflation
      *
      * @return string data string
+     *
+     * @throws Exception
      */
-    protected function decodeFilterFlateDecode($data)
+    protected function decodeFilterFlateDecode(string $data, int $decodeMemoryLimit): ?string
     {
         /*
          * gzuncompress may throw a not catchable E_WARNING in case of an error (like $data is empty)
@@ -239,9 +246,11 @@ class FilterHelper
             }
         });
 
+        $decoded = null;
+
         // initialize string to return
         try {
-            $decoded = gzuncompress($data);
+            $decoded = gzuncompress($data, $decodeMemoryLimit);
             if (false === $decoded) {
                 throw new Exception('decodeFilterFlateDecode: invalid code');
             }
@@ -264,7 +273,7 @@ class FilterHelper
      *
      * @return string Data string
      */
-    protected function decodeFilterLZWDecode($data)
+    protected function decodeFilterLZWDecode(string $data): string
     {
         // initialize string to return
         $decoded = '';
@@ -345,10 +354,8 @@ class FilterHelper
      * Decompresses data encoded using a byte-oriented run-length encoding algorithm.
      *
      * @param string $data Data to decode
-     *
-     * @return string
      */
-    protected function decodeFilterRunLengthDecode($data)
+    protected function decodeFilterRunLengthDecode(string $data): string
     {
         // initialize string to return
         $decoded = '';
@@ -382,7 +389,7 @@ class FilterHelper
     /**
      * @return array list of available filters
      */
-    public function getAvailableFilters()
+    public function getAvailableFilters(): array
     {
         return $this->availableFilters;
     }
