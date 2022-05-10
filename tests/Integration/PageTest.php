@@ -32,6 +32,7 @@
 
 namespace Tests\Smalot\PdfParser\Integration;
 
+use Smalot\PdfParser\Config;
 use Smalot\PdfParser\Document;
 use Smalot\PdfParser\Element\ElementMissing;
 use Smalot\PdfParser\Font;
@@ -40,7 +41,7 @@ use Tests\Smalot\PdfParser\TestCase;
 
 class PageTest extends TestCase
 {
-    public function testGetFonts()
+    public function testGetFonts(): void
     {
         // Document with text.
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
@@ -74,7 +75,7 @@ class PageTest extends TestCase
         $this->assertEquals(0, \count($fonts));
     }
 
-    public function testGetFontsElementMissing()
+    public function testGetFontsElementMissing(): void
     {
         $headerResources = $this->getMockBuilder('Smalot\PdfParser\Header')
             ->disableOriginalConstructor()
@@ -103,7 +104,7 @@ class PageTest extends TestCase
         $this->assertEquals([], $fonts);
     }
 
-    public function testGetFont()
+    public function testGetFont(): void
     {
         // Document with text.
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
@@ -120,7 +121,7 @@ class PageTest extends TestCase
         $this->assertTrue($font instanceof Font);
     }
 
-    public function testGetText()
+    public function testGetText(): void
     {
         // Document with text.
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
@@ -141,7 +142,32 @@ class PageTest extends TestCase
         $this->assertStringContainsString('Verdana', $text);
     }
 
-    public function testExtractRawData()
+    /**
+     * @group memory-heavy
+     *
+     * @see https://github.com/smalot/pdfparser/pull/457
+     */
+    public function testGetTextPullRequest457(): void
+    {
+        // Document with text.
+        $filename = $this->rootDir.'/samples/bugs/PullRequest457.pdf';
+        $parser = $this->getParserInstance();
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $text = $page->getText();
+
+        $this->assertTrue(1000 < \strlen($text));
+        $this->assertStringContainsString('SUPER', $text);
+        $this->assertStringContainsString('VOORDEEL', $text);
+        $this->assertStringContainsString('KRANT', $text);
+        $this->assertStringContainsString('DINSDAG', $text);
+        $this->assertStringContainsString('Snelfilterkoffie', $text);
+        $this->assertStringContainsString('AardappelenZak', $text);
+        $this->assertStringContainsString('ALL', $text);
+    }
+
+    public function testExtractRawData(): void
     {
         // Document with text.
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
@@ -172,7 +198,7 @@ class PageTest extends TestCase
         $this->assertStringContainsString('0.999429 0 0 1 201.96 720.68', $tmItem['c']);
     }
 
-    public function testExtractDecodedRawData()
+    public function testExtractDecodedRawData(): void
     {
         // Document with text.
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
@@ -207,7 +233,7 @@ class PageTest extends TestCase
         $this->assertStringContainsString('o', $tjItem['c'][2]['c']);
     }
 
-    public function testExtractRawDataWithCorruptedPdf()
+    public function testExtractRawDataWithCorruptedPdf(): void
     {
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Unable to find xref (PDF corrupted?)');
@@ -218,7 +244,7 @@ class PageTest extends TestCase
             ->getPages();
     }
 
-    public function testGetDataCommands()
+    public function testGetDataCommands(): void
     {
         // Document with text.
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
@@ -253,7 +279,7 @@ class PageTest extends TestCase
         $this->assertStringContainsString('o', $tjItem['c'][2]['c']);
     }
 
-    public function testGetDataTm()
+    public function testGetDataTm(): void
     {
         // Document with text.
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
@@ -416,12 +442,52 @@ class PageTest extends TestCase
         $this->assertStringContainsString('Purchase 2', $item[1]);
     }
 
+    public function testDataTmFontInfoHasToBeIncluded(): void
+    {
+        $config = new Config();
+        $config->setDataTmFontInfoHasToBeIncluded(true);
+
+        $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
+        $parser = $this->getParserInstance($config);
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $dataTm = $page->getDataTm();
+        $fonts = $page->getFonts();
+
+        $item = $dataTm[0];
+        $this->assertCount(4, $item);
+        $this->assertEquals($item[2], 'R7');
+        $this->assertEquals($item[3], '27.96');
+        $this->assertArrayHasKey('R7', $fonts);
+        $item = $dataTm[80];
+        $this->assertCount(4, $item);
+        $this->assertEquals($item[2], 'R14');
+        $this->assertEquals($item[3], '11.04');
+        $this->assertArrayHasKey('R7', $fonts);
+
+        $filename = $this->rootDir.'/samples/InternationalChars.pdf';
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $dataTm = $page->getDataTm();
+        $fonts = $page->getFonts();
+
+        $item = $dataTm[88];
+        $this->assertEquals($item[2], 'C2_0');
+        $this->assertEquals($item[3], '1');
+        $this->assertArrayHasKey('C2_0', $fonts);
+        foreach ($dataTm as $item) {
+            $this->assertCount(4, $item);
+        }
+    }
+
     /**
      * Tests getDataTm with hexadecimal encoded document text.
      *
      * @see https://github.com/smalot/pdfparser/issues/336
      */
-    public function testGetDataTmIssue336()
+    public function testGetDataTmIssue336(): void
     {
         $filename = $this->rootDir.'/samples/bugs/Issue336_decode_hexadecimal.pdf';
         $document = $this->getParserInstance()->parseFile($filename);
@@ -455,25 +521,30 @@ class PageTest extends TestCase
      * Sample pdf file provided by @Reqrefusion, see
      * https://github.com/smalot/pdfparser/pull/350#issuecomment-703195220
      */
-    public function testGetPages()
+    public function testGetPages(): void
     {
         $filename = $this->rootDir.'/samples/bugs/Issue331.pdf';
         $document = $this->getParserInstance()->parseFile($filename);
         $pages = $document->getPages();
 
-        // This should actually be 3 pages, but as long as the cause for issue #331
-        // has not been found and the issue is not fixed, we'll settle for 2 here.
-        // We still test for the count, so in case the bug should be fixed
-        // unknowingly, we don't forget to resolve the issue as well and make sure
-        // this assertion is present.
-        $this->assertCount(2, $pages);
+        /*
+         * The problem of issue #331 is fixed by the pull request of the issue #479.
+         * The original Issue331.pdf was modified so for the updated version (actual
+         * version) a new xref was added and now the valid /Index has the following value:
+         *    [1 1 3 1 7 1 175 1 178 1 219 2]
+         * This means, that there a 6 pairs containing the values for 'first object id'
+         * and 'number of objects'. Till now only the first entry was used and so the
+         * objects of all following entries gots a wrong id.
+         * By the fix of issue #479 now the expected number of pages is counted.
+         */
+        $this->assertCount(3, $pages);
 
         foreach ($pages as $page) {
             $this->assertTrue($page instanceof Page);
         }
     }
 
-    public function testGetTextXY()
+    public function testGetTextXY(): void
     {
         // Document with text.
         $filename = $this->rootDir.'/samples/Document1_pdfcreator_nocompressed.pdf';
@@ -569,5 +640,136 @@ class PageTest extends TestCase
 
         $result = $page->getTextXY(174, 827, 1, 1);
         $this->assertStringContainsString('Purchase 2', $result[0][1]);
+    }
+
+    public function testExtractDecodedRawDataIssue450(): void
+    {
+        $filename = $this->rootDir.'/samples/bugs/Issue450.pdf';
+        $parser = $this->getParserInstance();
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $extractedDecodedRawData = $page->extractDecodedRawData();
+        $this->assertIsArray($extractedDecodedRawData);
+        $this->assertGreaterThan(3, \count($extractedDecodedRawData));
+        $this->assertIsArray($extractedDecodedRawData[3]);
+        $this->assertEquals('TJ', $extractedDecodedRawData[3]['o']);
+        $this->assertIsArray($extractedDecodedRawData[3]['c']);
+        $this->assertIsArray($extractedDecodedRawData[3]['c'][0]);
+        $this->assertEquals(3, \count($extractedDecodedRawData[3]['c'][0]));
+        $this->assertEquals('{signature:signer505906:Please+Sign+Here}', $extractedDecodedRawData[3]['c'][0]['c']);
+    }
+
+    public function testGetDataTmIssue450(): void
+    {
+        $filename = $this->rootDir.'/samples/bugs/Issue450.pdf';
+        $parser = $this->getParserInstance();
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $dataTm = $page->getDataTm();
+        $this->assertIsArray($dataTm);
+        $this->assertEquals(1, \count($dataTm));
+        $this->assertIsArray($dataTm[0]);
+        $this->assertEquals(2, \count($dataTm[0]));
+        $this->assertIsArray($dataTm[0][0]);
+        $this->assertEquals(6, \count($dataTm[0][0]));
+        $this->assertEquals(1, $dataTm[0][0][0]);
+        $this->assertEquals(0, $dataTm[0][0][1]);
+        $this->assertEquals(0, $dataTm[0][0][2]);
+        $this->assertEquals(1, $dataTm[0][0][3]);
+        $this->assertEquals(67.5, $dataTm[0][0][4]);
+        $this->assertEquals(756.25, $dataTm[0][0][5]);
+        $this->assertEquals('{signature:signer505906:Please+Sign+Here}', $dataTm[0][1]);
+    }
+
+    public function testIsFpdf(): void
+    {
+        $filename = $this->rootDir.'/samples/Document1_foxitreader.pdf';
+        $parser = $this->getParserInstance();
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $this->assertFalse($page->isFpdf());
+        $filename = $this->rootDir.'/samples/bugs/Issue454.pdf';
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $this->assertTrue($page->isFpdf());
+    }
+
+    public function testGetPageNumber(): void
+    {
+        $filename = $this->rootDir.'/samples/Document1_foxitreader.pdf';
+        $parser = $this->getParserInstance();
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $this->assertEquals(0, $page->getPageNumber());
+        $filename = $this->rootDir.'/samples/Document1_pdfcreator.pdf';
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $this->assertEquals(0, $page->getPageNumber());
+        $filename = $this->rootDir.'/samples/Document2_pdfcreator_nocompressed.pdf';
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $this->assertEquals(0, $page->getPageNumber());
+        $filename = $this->rootDir.'/samples/InternationalChars.pdf';
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $this->assertEquals(0, $page->getPageNumber());
+        $filename = $this->rootDir.'/samples/SimpleInvoiceFilledExample1.pdf';
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $this->assertEquals(0, $page->getPageNumber());
+        $filename = $this->rootDir.'/samples/bugs/Issue454.pdf';
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $this->assertEquals(0, $page->getPageNumber());
+        $page = $pages[1];
+        $this->assertEquals(1, $page->getPageNumber());
+        $page = $pages[2];
+        $this->assertEquals(2, $page->getPageNumber());
+        $page = $pages[3];
+        $this->assertEquals(3, $page->getPageNumber());
+    }
+
+    public function testIssue454(): void
+    {
+        $filename = $this->rootDir.'/samples/bugs/Issue454.pdf';
+        $parser = $this->getParserInstance();
+        $document = $parser->parseFile($filename);
+        $pages = $document->getPages();
+        $page = $pages[0];
+        $dataTm = $page->getDataTm();
+        $this->assertIsArray($dataTm);
+        $this->assertGreaterThan(0, \count($dataTm));
+        $this->assertIsArray($dataTm[0]);
+        $this->assertEquals(2, \count($dataTm[0]));
+        $this->assertIsArray($dataTm[0][0]);
+        $this->assertEquals(6, \count($dataTm[0][0]));
+        $this->assertEquals(201.96, $dataTm[0][0][4]);
+        $this->assertEquals(720.68, $dataTm[0][0][5]);
+        $this->assertStringContainsString('Document title', $dataTm[0][1]);
+        $textData = $page->getTextXY(201.96, 720.68);
+        $this->assertStringContainsString('Document title', $textData[0][1]);
+        $page = $pages[2];
+        $dataTm = $page->getDataTm();
+        $this->assertIsArray($dataTm);
+        $this->assertGreaterThan(0, \count($dataTm));
+        $this->assertIsArray($dataTm[0]);
+        $this->assertEquals(2, \count($dataTm[0]));
+        $this->assertIsArray($dataTm[0][0]);
+        $this->assertEquals(6, \count($dataTm[0][0]));
+        $this->assertEquals(67.5, $dataTm[0][0][4]);
+        $this->assertEquals(756.25, $dataTm[0][0][5]);
+        $this->assertStringContainsString('{signature:signer505906:Please+Sign+Here}', $dataTm[0][1]);
+        $textData = $page->getTextXY(67.5, 756.25);
+        $this->assertStringContainsString('{signature:signer505906:Please+Sign+Here}', $textData[0][1]);
     }
 }

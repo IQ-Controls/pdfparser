@@ -71,19 +71,14 @@ class PDFObject
      */
     protected $config;
 
-    /**
-     * @param Header $header
-     * @param string $content
-     * @param Config $config
-     */
     public function __construct(
         Document $document,
-        Header $header = null,
-        $content = null,
-        Config $config = null
+        ?Header $header = null,
+        ?string $content = null,
+        ?Config $config = null
     ) {
         $this->document = $document;
-        $this->header = null !== $header ? $header : new Header();
+        $this->header = $header ?? new Header();
         $this->content = $content;
         $this->config = $config;
     }
@@ -92,56 +87,45 @@ class PDFObject
     {
     }
 
-    /**
-     * @return Header|null
-     */
-    public function getHeader()
+    public function getDocument(): Document
+    {
+        return $this->document;
+    }
+
+    public function getHeader(): ?Header
     {
         return $this->header;
     }
 
+    public function getConfig(): ?Config
+    {
+        return $this->config;
+    }
+
     /**
-     * @param string $name
-     *
-     * @return Element|PDFObject
+     * @return Element|PDFObject|Header
      */
-    public function get($name)
+    public function get(string $name)
     {
         return $this->header->get($name);
     }
 
-    /**
-     * @param string $name
-     *
-     * @return bool
-     */
-    public function has($name)
+    public function has(string $name): bool
     {
         return $this->header->has($name);
     }
 
-    /**
-     * @param bool $deep
-     *
-     * @return array
-     */
-    public function getDetails($deep = true)
+    public function getDetails(bool $deep = true): array
     {
         return $this->header->getDetails($deep);
     }
 
-    /**
-     * @return string|null
-     */
-    public function getContent()
+    public function getContent(): ?string
     {
         return $this->content;
     }
 
-    /**
-     * @param string $content
-     */
-    public function cleanContent($content, $char = 'X')
+    public function cleanContent(string $content, string $char = 'X')
     {
         $char = $char[0];
         $content = str_replace(['\\\\', '\\)', '\\('], $char.$char, $content);
@@ -200,12 +184,7 @@ class PDFObject
         return $content;
     }
 
-    /**
-     * @param string $content
-     *
-     * @return array
-     */
-    public function getSectionsText($content)
+    public function getSectionsText(?string $content): array
     {
         $sections = [];
         $content = ' '.$content.' ';
@@ -246,14 +225,17 @@ class PDFObject
         return $sections;
     }
 
-    private function getDefaultFont(Page $page = null)
+    private function getDefaultFont(Page $page = null): Font
     {
         $fonts = [];
         if (null !== $page) {
             $fonts = $page->getFonts();
         }
 
-        $fonts = array_merge($fonts, array_values($this->document->getFonts()));
+        $firstFont = $this->document->getFirstFont();
+        if (null !== $firstFont) {
+            $fonts[] = $firstFont;
+        }
 
         if (\count($fonts) > 0) {
             return reset($fonts);
@@ -263,13 +245,9 @@ class PDFObject
     }
 
     /**
-     * @param Page $page
-     *
-     * @return string
-     *
      * @throws \Exception
      */
-    public function getText(Page $page = null)
+    public function getText(?Page $page = null): string
     {
         $result = '';
         $positional_text = [ ];
@@ -317,7 +295,7 @@ class PDFObject
                         ) {
                             // horizontal offset
                             if (!$this->config->getIgnoreHorizontalOffset()) {
-                                $text .= ' ';
+                                $text .= $this->config->getHorizontalOffset();
                             }
                         }
                         $current_position_td = ['x' => $x, 'y' => $y];
@@ -495,20 +473,13 @@ class PDFObject
 
         array_pop(self::$recursionStack);
 
-        //krsort($positional_text);
-        //$result = join("", array_values($positional_text));
-
         return $result.' ';
     }
 
     /**
-     * @param Page $page
-     *
-     * @return array
-     *
      * @throws \Exception
      */
-    public function getTextArray(Page $page = null)
+    public function getTextArray(?Page $page = null): array
     {
         $text = [];
         $sections = $this->getSectionsText($this->content);
@@ -628,13 +599,7 @@ class PDFObject
         return $text;
     }
 
-    /**
-     * @param string $text_part
-     * @param int    $offset
-     *
-     * @return array
-     */
-    public function getCommandsText($text_part, &$offset = 0)
+    public function getCommandsText(string $text_part, int &$offset = 0): array
     {
         $commands = $matches = [];
 
@@ -785,22 +750,17 @@ class PDFObject
         return $commands;
     }
 
-    /**
-     * @param string $content
-     *
-     * @return PDFObject
-     */
     public static function factory(
         Document $document,
         Header $header,
-        $content,
-        Config $config = null
-    ) {
+        ?string $content,
+        ?Config $config = null
+    ): self {
         switch ($header->get('Type')->getContent()) {
             case 'XObject':
                 switch ($header->get('Subtype')->getContent()) {
                     case 'Image':
-                        return new Image($document, $header, $content, $config);
+                        return new Image($document, $header, $config->getRetainImageContent() ? $content : null, $config);
 
                     case 'Form':
                         return new Form($document, $header, $content, $config);
@@ -834,10 +794,8 @@ class PDFObject
 
     /**
      * Returns unique id identifying the object.
-     *
-     * @return string
      */
-    protected function getUniqueId()
+    protected function getUniqueId(): string
     {
         return spl_object_hash($this);
     }

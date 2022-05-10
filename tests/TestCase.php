@@ -33,6 +33,7 @@
 namespace Tests\Smalot\PdfParser;
 
 use PHPUnit\Framework\TestCase as PHPTestCase;
+use Smalot\PdfParser\Config;
 use Smalot\PdfParser\Document;
 use Smalot\PdfParser\Element;
 use Smalot\PdfParser\Parser;
@@ -53,18 +54,18 @@ abstract class TestCase extends PHPTestCase
         $this->rootDir = __DIR__.'/..';
     }
 
-    protected function getDocumentInstance()
+    protected function getDocumentInstance(): Document
     {
         return new Document();
     }
 
-    protected function getElementInstance($value)
+    protected function getElementInstance($value): Element
     {
         return new Element($value);
     }
 
-    protected function getParserInstance()
+    protected function getParserInstance(?Config $config = null): Parser
     {
-        return new Parser();
+        return new Parser([], $config);
     }
 }

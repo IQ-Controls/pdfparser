@@ -64,7 +64,7 @@ class RawDataParserTest extends TestCase
      * @see https://github.com/smalot/pdfparser/issues/372
      * @see https://github.com/smalot/pdfparser/pull/377
      */
-    public function testGetRawObjectIssue372()
+    public function testGetRawObjectIssue372(): void
     {
         // The following $data content is a minimal example to trigger the infinite loop
         $data = '<</Producer (eDkºãa˜þõ‚LÅòÕ�PïÙ��)©)>>';
@@ -98,7 +98,7 @@ class RawDataParserTest extends TestCase
      * @see https://github.com/smalot/pdfparser/issues/392
      * @see https://github.com/smalot/pdfparser/issues/397
      */
-    public function testDecodeXrefStreamIssue356()
+    public function testDecodeXrefStreamIssue356(): void
     {
         $filename = $this->rootDir.'/samples/bugs/Issue356.pdf';
 
@@ -109,7 +109,7 @@ class RawDataParserTest extends TestCase
         $this->assertStringContainsString('Ημερήσια έκθεση επιδημιολογικής', $pages[0]->getText());
     }
 
-    public function testDecodeObjectHeaderIssue405()
+    public function testDecodeObjectHeaderIssue405(): void
     {
         $filename = $this->rootDir.'/samples/bugs/Issue405.pdf';
 
@@ -118,5 +118,36 @@ class RawDataParserTest extends TestCase
         $pages = $document->getPages();
 
         $this->assertStringContainsString('Bug fix: PR #405', $pages[0]->getText());
+    }
+
+    /**
+     * Tests buggy behavior of decodeXrefStream.
+     *
+     * When PDF has more than one entry in the /Index area (for example by changing
+     * the document description), only the first entry is used.
+     * If the fix is not used the array returned by getDetails() contains only the entry
+     * with the key 'Pages'. All other entries like 'Author', 'Creator', 'Title',
+     * 'Subject' (which come from the 'Info' object) are not listed, because the
+     * 'Info' object gets a wrong object id during parsing the data into the xref structure.
+     * So the object id listed at the /Info entry is not valid and the data of the info object
+     * cannot be loaded during executing Document::buildDetails().
+     *
+     * @see https://github.com/smalot/pdfparser/pull/479
+     */
+    public function testDecodeXrefStreamIssue479(): void
+    {
+        $filename = $this->rootDir.'/samples/bugs/Issue479.pdf';
+
+        $parser = $this->getParserInstance();
+        $document = $parser->parseFile($filename);
+        $details = $document->getDetails();
+
+        $this->assertArrayHasKey('Author', $details);
+        $this->assertArrayHasKey('CreationDate', $details);
+        $this->assertArrayHasKey('Creator', $details);
+        $this->assertArrayHasKey('ModDate', $details);
+        $this->assertArrayHasKey('Producer', $details);
+        $this->assertArrayHasKey('Subject', $details);
+        $this->assertArrayHasKey('Title', $details);
     }
 }

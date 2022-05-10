@@ -48,7 +48,7 @@ class HeaderTest extends TestCase
     /**
      * Checks that init function is called for each element.
      */
-    public function testInitHappyPath()
+    public function testInitHappyPath(): void
     {
         $element = $this->createMock(Element::class);
         $element->expects($this->exactly(1))->method('init');
@@ -66,7 +66,7 @@ class HeaderTest extends TestCase
      *
      * @doesNotPerformAssertions
      */
-    public function testInitInvalidElement()
+    public function testInitInvalidElement(): void
     {
         $element = false;
 
@@ -74,7 +74,7 @@ class HeaderTest extends TestCase
         $fixture->init();
     }
 
-    public function testParse()
+    public function testParse(): void
     {
         $document = $this->getDocumentInstance();
 
@@ -108,7 +108,7 @@ class HeaderTest extends TestCase
         $this->assertEquals(1, \count($header->getElements()));
     }
 
-    public function testGetElements()
+    public function testGetElements(): void
     {
         $document = $this->getDocumentInstance();
 
@@ -126,7 +126,7 @@ class HeaderTest extends TestCase
         $this->assertEquals(ElementName::class, $types['Subtype']);
     }
 
-    public function testHas()
+    public function testHas(): void
     {
         $document = $this->getDocumentInstance();
 
@@ -140,7 +140,7 @@ class HeaderTest extends TestCase
         $this->assertFalse($header->has('Text'));
     }
 
-    public function testGet()
+    public function testGet(): void
     {
         $document = $this->getDocumentInstance();
 
@@ -155,9 +155,21 @@ class HeaderTest extends TestCase
         $this->assertTrue($header->get('Font') instanceof Page);
         $this->assertTrue($header->get('Image') instanceof ElementMissing);
         $this->assertTrue($header->get('Resources') instanceof ElementMissing);
+
+        /**
+         * A double forward slash in the header's content results in a falsy element
+         * that should be parsed to ElementMissing instead.
+         *
+         * @see https://github.com/smalot/pdfparser/pull/525
+         */
+        $content = '<</Type/Page/SubType//Text>>foo';
+        $position = 0;
+        $header = Header::parse($content, $document, $position);
+
+        $this->assertTrue($header->get('SubType') instanceof ElementMissing);
     }
 
-    public function testResolveXRef()
+    public function testResolveXRef(): void
     {
         $document = $this->getDocumentInstance();
         $content = '<</Type/Page/SubType/Text/Font 5 0 R/Resources 8 0 R>>foo';
