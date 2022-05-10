@@ -231,6 +231,8 @@ class Page extends PDFObject
         return '';
     }
 
+    
+
     /**
      * @param Page $page
      *
@@ -531,6 +533,8 @@ class Page extends PDFObject
                     $extractedData[] = $command;
                     break;
                 default:
+                    $c = $command;
+                    break;
             }
         }
 
@@ -724,11 +728,45 @@ class Page extends PDFObject
                     $extractedData[] = [$Tm, $currentText];
                     break;
                 default:
+                    $a = $Tm;
+                    break;
             }
         }
         $this->dataTm = $extractedData;
 
         return $extractedData;
+    }
+
+    /**
+     * Builds a map of text, indexing via their coordinates.
+     * @return void 
+     */
+    public function getTextMap() {
+        if (!isset($this->dataTm) || !$this->dataTm) {
+            $this->getDataTm();
+        }
+
+
+        $map = [];
+
+        /* Method B */
+
+
+        /* Method A */
+        foreach ($this->dataTm as $item) {
+            $tm = $item[0];
+            $x = (float) $tm[4];
+            $y = (float) $tm[5];
+            $text = $item[1];
+            
+            $map[] = [
+                'pos' => [$x, $y],
+                'matrix' => $tm,
+                'text' => $text
+            ];
+        }
+
+        return $map;
     }
 
     /**
