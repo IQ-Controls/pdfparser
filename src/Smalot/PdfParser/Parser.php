@@ -5,9 +5,11 @@
  *          This file is part of the PdfParser library.
  *
  * @author  Sébastien MALOT <sebastien@malot.fr>
+ *
  * @date    2017-01-03
  *
  * @license LGPLv3
+ *
  * @url     <https://github.com/smalot/pdfparser>
  *
  *  PdfParser is a pdf library written in PHP, extraction oriented.
@@ -64,22 +66,15 @@ class Parser
         $this->rawDataParser = new RawDataParser($cfg, $this->config);
     }
 
-    /**
-     * @return Config
-     */
-    public function getConfig()
+    public function getConfig(): Config
     {
         return $this->config;
     }
 
     /**
-     * @param string $filename
-     *
-     * @return Document
-     *
      * @throws \Exception
      */
-    public function parseFile($filename)
+    public function parseFile(string $filename): Document
     {
         $content = file_get_contents($filename);
         /*
@@ -98,12 +93,10 @@ class Parser
     /**
      * @param string $content PDF content to parse
      *
-     * @return Document
-     *
      * @throws \Exception if secured PDF file was detected
      * @throws \Exception if no object list was found
      */
-    public function parseContent($content)
+    public function parseContent(string $content): Document
     {
         // Create structure from raw data.
         list($xref, $data) = $this->rawDataParser->parseData($content);
@@ -131,7 +124,7 @@ class Parser
         return $document;
     }
 
-    protected function parseTrailer($structure, $document)
+    protected function parseTrailer(array $structure, ?Document $document)
     {
         $trailer = [];
 
@@ -153,12 +146,7 @@ class Parser
         return new Header($trailer, $document);
     }
 
-    /**
-     * @param string   $id
-     * @param array    $structure
-     * @param Document $document
-     */
-    protected function parseObject($id, $structure, $document)
+    protected function parseObject(string $id, array $structure, ?Document $document)
     {
         $header = new Header([], $document);
         $content = '';
@@ -199,7 +187,7 @@ class Parser
                             '/(\d+\s+\d+\s*)/s',
                             $match[1],
                             -1,
-                          \PREG_SPLIT_NO_EMPTY | \PREG_SPLIT_DELIM_CAPTURE
+                            \PREG_SPLIT_NO_EMPTY | \PREG_SPLIT_DELIM_CAPTURE
                         );
                         $table = [];
 
@@ -224,9 +212,11 @@ class Parser
                         }
 
                         // It is not necessary to store this content.
-                        $content = '';
 
                         return;
+                    } elseif ($header->get('Type')->equals('Metadata')) {
+                        // Attempt to parse XMP XML Metadata
+                        $document->extractXMPMetadata($content);
                     }
                     break;
 
@@ -248,14 +238,9 @@ class Parser
     }
 
     /**
-     * @param array    $structure
-     * @param Document $document
-     *
-     * @return Header
-     *
      * @throws \Exception
      */
-    protected function parseHeader($structure, $document)
+    protected function parseHeader(array $structure, ?Document $document): Header
     {
         $elements = [];
         $count = \count($structure);
@@ -272,16 +257,19 @@ class Parser
     }
 
     /**
-     * @param string       $type
      * @param string|array $value
-     * @param Document     $document
      *
      * @return Element|Header|null
      *
      * @throws \Exception
      */
-    protected function parseHeaderElement($type, $value, $document)
+    protected function parseHeaderElement(?string $type, $value, ?Document $document)
     {
+        $valueIsEmpty = null == $value || '' == $value || false == $value;
+        if (('<<' === $type || '>>' === $type) && $valueIsEmpty) {
+            $value = [];
+        }
+
         switch ($type) {
             case '<<':
             case '>>':
@@ -307,7 +295,7 @@ class Parser
                 return ElementString::parse('('.$value.')', $document);
 
             case '<':
-                return $this->parseHeaderElement('(', ElementHexa::decode($value, $document), $document);
+                return $this->parseHeaderElement('(', ElementHexa::decode($value), $document);
 
             case '/':
                 return ElementName::parse('/'.$value, $document);
@@ -330,7 +318,7 @@ class Parser
                 return new ElementArray($values, $document);
 
             case 'endstream':
-            case 'obj': //I don't know what it means but got my project fixed.
+            case 'obj': // I don't know what it means but got my project fixed.
             case '':
                 // Nothing to do with.
                 return null;

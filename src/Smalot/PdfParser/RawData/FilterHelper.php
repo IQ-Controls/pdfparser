@@ -15,9 +15,11 @@
  * @file This file is part of the PdfParser library.
  *
  * @author  Konrad Abicht <k.abicht@gmail.com>
+ *
  * @date    2020-01-06
  *
  * @license LGPLv3
+ *
  * @url     <https://github.com/smalot/pdfparser>
  *
  *  PdfParser is a pdf library written in PHP, extraction oriented.
@@ -40,8 +42,6 @@
 
 namespace Smalot\PdfParser\RawData;
 
-use Exception;
-
 class FilterHelper
 {
     protected $availableFilters = ['ASCIIHexDecode', 'ASCII85Decode', 'LZWDecode', 'FlateDecode', 'RunLengthDecode'];
@@ -54,9 +54,9 @@ class FilterHelper
      *
      * @return string Decoded data string
      *
-     * @throws Exception if a certain decode function is not implemented yet
+     * @throws \Exception if a certain decode function is not implemented yet
      */
-    public function decodeFilter($filter, $data)
+    public function decodeFilter(string $filter, string $data, int $decodeMemoryLimit = 0): string
     {
         switch ($filter) {
             case 'ASCIIHexDecode':
@@ -69,21 +69,21 @@ class FilterHelper
                 return $this->decodeFilterLZWDecode($data);
 
             case 'FlateDecode':
-                return $this->decodeFilterFlateDecode($data);
+                return $this->decodeFilterFlateDecode($data, $decodeMemoryLimit);
 
             case 'RunLengthDecode':
                 return $this->decodeFilterRunLengthDecode($data);
 
             case 'CCITTFaxDecode':
-                throw new Exception('Decode CCITTFaxDecode not implemented yet.');
+                throw new \Exception('Decode CCITTFaxDecode not implemented yet.');
             case 'JBIG2Decode':
-                throw new Exception('Decode JBIG2Decode not implemented yet.');
+                throw new \Exception('Decode JBIG2Decode not implemented yet.');
             case 'DCTDecode':
-                throw new Exception('Decode DCTDecode not implemented yet.');
+                throw new \Exception('Decode DCTDecode not implemented yet.');
             case 'JPXDecode':
-                throw new Exception('Decode JPXDecode not implemented yet.');
+                throw new \Exception('Decode JPXDecode not implemented yet.');
             case 'Crypt':
-                throw new Exception('Decode Crypt not implemented yet.');
+                throw new \Exception('Decode Crypt not implemented yet.');
             default:
                 return $data;
         }
@@ -97,8 +97,10 @@ class FilterHelper
      * @param string $data Data to decode
      *
      * @return string data string
+     *
+     * @throws \Exception
      */
-    protected function decodeFilterASCIIHexDecode($data)
+    protected function decodeFilterASCIIHexDecode(string $data): string
     {
         // all white-space characters shall be ignored
         $data = preg_replace('/[\s]/', '', $data);
@@ -117,12 +119,12 @@ class FilterHelper
                 // EOD shall behave as if a 0 (zero) followed the last digit
                 $data = substr($data, 0, -1).'0'.substr($data, -1);
             } else {
-                throw new Exception('decodeFilterASCIIHexDecode: invalid code');
+                throw new \Exception('decodeFilterASCIIHexDecode: invalid code');
             }
         }
         // check for invalid characters
         if (preg_match('/[^a-fA-F\d]/', $data) > 0) {
-            throw new Exception('decodeFilterASCIIHexDecode: invalid code');
+            throw new \Exception('decodeFilterASCIIHexDecode: invalid code');
         }
         // get one byte of binary data for each pair of ASCII hexadecimal digits
         $decoded = pack('H*', $data);
@@ -138,21 +140,23 @@ class FilterHelper
      * @param string $data Data to decode
      *
      * @return string data string
+     *
+     * @throws \Exception
      */
-    protected function decodeFilterASCII85Decode($data)
+    protected function decodeFilterASCII85Decode(string $data): string
     {
         // initialize string to return
         $decoded = '';
         // all white-space characters shall be ignored
         $data = preg_replace('/[\s]/', '', $data);
         // remove start sequence 2-character sequence <~ (3Ch)(7Eh)
-        if (false !== strpos($data, '<~')) {
+        if (0 === strpos($data, '<~')) {
             // remove EOD and extra data (if any)
             $data = substr($data, 2);
         }
         // check for EOD: 2-character sequence ~> (7Eh)(3Eh)
         $eod = strpos($data, '~>');
-        if (false !== $eod) {
+        if (\strlen($data) - 2 === $eod) {
             // remove EOD and extra data (if any)
             $data = substr($data, 0, $eod);
         }
@@ -160,14 +164,14 @@ class FilterHelper
         $data_length = \strlen($data);
         // check for invalid characters
         if (preg_match('/[^\x21-\x75,\x74]/', $data) > 0) {
-            throw new Exception('decodeFilterASCII85Decode: invalid code');
+            throw new \Exception('decodeFilterASCII85Decode: invalid code');
         }
         // z sequence
         $zseq = \chr(0).\chr(0).\chr(0).\chr(0);
         // position inside a group of 4 bytes (0-3)
         $group_pos = 0;
         $tuple = 0;
-        $pow85 = [(85 * 85 * 85 * 85), (85 * 85 * 85), (85 * 85), 85, 1];
+        $pow85 = [85 * 85 * 85 * 85, 85 * 85 * 85, 85 * 85, 85, 1];
 
         // for each byte
         for ($i = 0; $i < $data_length; ++$i) {
@@ -177,7 +181,7 @@ class FilterHelper
                 if (0 == $group_pos) {
                     $decoded .= $zseq;
                 } else {
-                    throw new Exception('decodeFilterASCII85Decode: invalid code');
+                    throw new \Exception('decodeFilterASCII85Decode: invalid code');
                 }
             } else {
                 // the value represented by a group of 5 characters should never be greater than 2^32 - 1
@@ -192,7 +196,7 @@ class FilterHelper
             }
         }
         if ($group_pos > 1) {
-            $tuple += $pow85[($group_pos - 1)];
+            $tuple += $pow85[$group_pos - 1];
         }
         // last tuple (if any)
         switch ($group_pos) {
@@ -209,7 +213,7 @@ class FilterHelper
                 break;
 
             case 1:
-                throw new Exception('decodeFilterASCII85Decode: invalid code');
+                throw new \Exception('decodeFilterASCII85Decode: invalid code');
         }
 
         return $decoded;
@@ -220,11 +224,14 @@ class FilterHelper
      *
      * Decompresses data encoded using the zlib/deflate compression method, reproducing the original text or binary data.
      *
-     * @param string $data Data to decode
+     * @param string $data              Data to decode
+     * @param int    $decodeMemoryLimit Memory limit on deflation
      *
      * @return string data string
+     *
+     * @throws \Exception
      */
-    protected function decodeFilterFlateDecode($data)
+    protected function decodeFilterFlateDecode(string $data, int $decodeMemoryLimit): ?string
     {
         /*
          * gzuncompress may throw a not catchable E_WARNING in case of an error (like $data is empty)
@@ -232,20 +239,22 @@ class FilterHelper
          */
         set_error_handler(function ($errNo, $errStr) {
             if (\E_WARNING === $errNo) {
-                throw new Exception($errStr);
+                throw new \Exception($errStr);
             } else {
                 // fallback to default php error handler
                 return false;
             }
         });
 
+        $decoded = null;
+
         // initialize string to return
         try {
-            $decoded = gzuncompress($data);
+            $decoded = gzuncompress($data, $decodeMemoryLimit);
             if (false === $decoded) {
-                throw new Exception('decodeFilterFlateDecode: invalid code');
+                throw new \Exception('decodeFilterFlateDecode: invalid code');
             }
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             throw $e;
         } finally {
             // Restore old handler just in case it was customized outside of PDFParser.
@@ -264,7 +273,7 @@ class FilterHelper
      *
      * @return string Data string
      */
-    protected function decodeFilterLZWDecode($data)
+    protected function decodeFilterLZWDecode(string $data): string
     {
         // initialize string to return
         $decoded = '';
@@ -345,10 +354,8 @@ class FilterHelper
      * Decompresses data encoded using a byte-oriented run-length encoding algorithm.
      *
      * @param string $data Data to decode
-     *
-     * @return string
      */
-    protected function decodeFilterRunLengthDecode($data)
+    protected function decodeFilterRunLengthDecode(string $data): string
     {
         // initialize string to return
         $decoded = '';
@@ -364,13 +371,13 @@ class FilterHelper
             } elseif ($byte < 128) {
                 // if the length byte is in the range 0 to 127
                 // the following length + 1 (1 to 128) bytes shall be copied literally during decompression
-                $decoded .= substr($data, ($i + 1), ($byte + 1));
+                $decoded .= substr($data, $i + 1, $byte + 1);
                 // move to next block
                 $i += ($byte + 2);
             } else {
                 // if length is in the range 129 to 255,
                 // the following single byte shall be copied 257 - length (2 to 128) times during decompression
-                $decoded .= str_repeat($data[($i + 1)], (257 - $byte));
+                $decoded .= str_repeat($data[$i + 1], 257 - $byte);
                 // move to next block
                 $i += 2;
             }
@@ -382,7 +389,7 @@ class FilterHelper
     /**
      * @return array list of available filters
      */
-    public function getAvailableFilters()
+    public function getAvailableFilters(): array
     {
         return $this->availableFilters;
     }

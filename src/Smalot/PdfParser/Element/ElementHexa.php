@@ -5,9 +5,11 @@
  *          This file is part of the PdfParser library.
  *
  * @author  Sébastien MALOT <sebastien@malot.fr>
+ *
  * @date    2017-01-03
  *
  * @license LGPLv3
+ *
  * @url     <https://github.com/smalot/pdfparser>
  *
  *  PdfParser is a pdf library written in PHP, extraction oriented.
@@ -38,22 +40,18 @@ use Smalot\PdfParser\Document;
 class ElementHexa extends ElementString
 {
     /**
-     * @param string   $content
-     * @param Document $document
-     * @param int      $offset
-     *
      * @return bool|ElementHexa|ElementDate
      */
-    public static function parse($content, Document $document = null, &$offset = 0)
+    public static function parse(string $content, Document $document = null, int &$offset = 0)
     {
         if (preg_match('/^\s*\<(?P<name>[A-F0-9]+)\>/is', $content, $match)) {
             $name = $match['name'];
             $offset += strpos($content, '<'.$name) + \strlen($name) + 2; // 1 for '>'
             // repackage string as standard
-            $name = '('.self::decode($name, $document).')';
-            $element = false;
+            $name = '('.self::decode($name).')';
+            $element = ElementDate::parse($name, $document);
 
-            if (!($element = ElementDate::parse($name, $document))) {
+            if (!$element) {
                 $element = ElementString::parse($name, $document);
             }
 
@@ -63,11 +61,7 @@ class ElementHexa extends ElementString
         return false;
     }
 
-    /**
-     * @param string   $value
-     * @param Document $document
-     */
-    public static function decode($value, Document $document = null)
+    public static function decode(string $value): string
     {
         $text = '';
         $length = \strlen($value);
