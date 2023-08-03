@@ -971,10 +971,10 @@ class RawDataParser
         $converted = '';
 
         $cutStart = strpos($pdfData, "<<\r\n");
-        if ($cutStart < 0)
+        if ($cutStart <= 0)
             return $pdfData;
 
-        for ($i = $cutStart; $i < strlen($pdfData); $i++) {
+        for ($i = $cutStart-2; $i < strlen($pdfData); $i++) {
             if ($depth > 0 || $pdfData[$i - 2] == "\n") {
                 if ($pdfData[$i - 1] == '<' && $pdfData[$i] == '<') {
                     $depth += 1;
