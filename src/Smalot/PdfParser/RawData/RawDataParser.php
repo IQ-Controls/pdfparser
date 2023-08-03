@@ -879,13 +879,20 @@ class RawDataParser
             }
             $matches = array_pop($matches);
             $startxref = $matches[1];
+        } elseif (strpos($pdfData, "\r\nxref", $offset) == $offset) {
+            // Already pointing at the xref table
+            $startxref = $offset+2;
         } elseif (strpos($pdfData, 'xref', $offset) == $offset) {
             // Already pointing at the xref table
             $startxref = $offset;
+            
         } elseif (preg_match('/([0-9]+[\s][0-9]+[\s]obj)/i', $pdfData, $matches, \PREG_OFFSET_CAPTURE, $offset)) {
             // Cross-Reference Stream object
             $startxref = $offset;
         } elseif ($startxrefPreg) {
+            if (count($matches) < 2)
+                throw new \Exception('Unable to match startxref');
+                
             // startxref found
             $startxref = $matches[1][0];
         } else {
@@ -933,6 +940,7 @@ class RawDataParser
 
         // get PDF content string
         $pdfData = $trimpos > 0 ? substr($data, $trimpos) : $data;
+        $pdfData = $this->convertXrefLineEndings($pdfData);
 
         // get xref and trailer data
         $xref = $this->getXrefData($pdfData);
@@ -947,5 +955,46 @@ class RawDataParser
         }
 
         return [$xref, $objects];
+    }
+
+     /**
+     * Fixes broken object references that use \r\n instead of just \n
+     * @param string $pdfData 
+     * @return string 
+     */
+    protected function convertXrefLineEndings(string $pdfData) : string {
+        $re = '/(?<!\\\)\r\n/sm';
+
+        $depth = 0;
+        $cutStart = 0;
+        $cutEnd = 0;
+        $converted = '';
+
+        $cutStart = strpos($pdfData, "<<\r\n");
+        if ($cutStart < 0)
+            return $pdfData;
+
+        for ($i = $cutStart; $i < strlen($pdfData); $i++) {
+            if ($depth > 0 || $pdfData[$i - 2] == "\n") {
+                if ($pdfData[$i - 1] == '<' && $pdfData[$i] == '<') {
+                    $depth += 1;
+                    if ($depth == 1) {
+                        $cutStart = $i-1;
+                        $converted .= substr($pdfData, $cutEnd, $cutStart - $cutEnd);
+                    }
+                }
+            }
+            
+            if ($depth > 0 && $pdfData[$i - 1] == '>' && $pdfData[$i] == '>') {
+                $depth -= 1;
+                if ($depth == 0) {
+                    $cutEnd = $i+1;
+                    $converted .= preg_replace($re, "\n", substr($pdfData, $cutStart, $cutEnd - $cutStart));
+                }
+            }
+        }
+
+        $converted .= substr($pdfData, $cutEnd);
+        return $converted;
     }
 }
