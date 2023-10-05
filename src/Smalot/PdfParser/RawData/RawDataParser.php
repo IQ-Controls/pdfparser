@@ -940,14 +940,17 @@ class RawDataParser
         if (empty($data)) {
             throw new \Exception('Empty PDF data given.');
         }
+
         // find the pdf header starting position
         if (false === ($trimpos = strpos($data, '%PDF-'))) {
             throw new \Exception('Invalid PDF data: missing %PDF header.');
         }
 
         // get PDF content string
+        $version = trim(substr($data, $trimpos, strpos($data, "\n", $trimpos) - $trimpos));
         $pdfData = $trimpos > 0 ? substr($data, $trimpos) : $data;
-        $pdfData = $this->convertXrefLineEndings($pdfData);
+        if ($version == '%PDF-1.1') 
+            $pdfData = $this->convertXrefLineEndings($pdfData);
 
         // get xref and trailer data
         $xref = $this->getXrefData($pdfData);
