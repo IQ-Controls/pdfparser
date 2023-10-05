@@ -134,9 +134,16 @@ class Font extends PDFObject
 
     /**
      * Convert unicode character code to "utf-8" encoded string.
+     *
+     * @param int|float $code Unicode character code. Will be casted to int internally!
      */
-    public static function uchr(int $code): string
+    public static function uchr($code): string
     {
+        // note:
+        // $code was typed as int before, but changed in https://github.com/smalot/pdfparser/pull/623
+        // because in some cases uchr was called with a float instead of an integer.
+        $code = (int) $code;
+
         if (!isset(self::$uchrCache[$code])) {
             // html_entity_decode() will not work with UTF-16 or UTF-32 char entities,
             // therefore, we use mb_convert_encoding() instead
@@ -276,7 +283,9 @@ class Font extends PDFObject
     {
         $index_map = array_flip($this->table);
         $details = $this->getDetails();
-        $widths = $details['Widths'];
+
+        // Usually, Widths key is set in $details array, but if it isn't use an empty array instead.
+        $widths = $details['Widths'] ?? [];
 
         // Widths array is zero indexed but table is not. We must map them based on FirstChar and LastChar
         $width_map = array_flip(range($details['FirstChar'], $details['LastChar']));
@@ -312,12 +321,12 @@ class Font extends PDFObject
         }
 
         $text = '';
-        $parts = preg_split('/(<[a-f0-9]+>)/si', $hexa, -1, \PREG_SPLIT_NO_EMPTY | \PREG_SPLIT_DELIM_CAPTURE);
+        $parts = preg_split('/(<[a-f0-9\s]+>)/si', $hexa, -1, \PREG_SPLIT_NO_EMPTY | \PREG_SPLIT_DELIM_CAPTURE);
 
         foreach ($parts as $part) {
-            if (preg_match('/^<.*>$/s', $part) && false === stripos($part, '<?xml')) {
-                // strip line breaks
-                $part = preg_replace("/[\r\n]/", '', $part);
+            if (preg_match('/^<[a-f0-9\s]+>$/si', $part)) {
+                // strip whitespace
+                $part = preg_replace("/\s/", '', $part);
                 $part = trim($part, '<>');
                 if ($add_braces) {
                     $text .= '(';
@@ -342,18 +351,20 @@ class Font extends PDFObject
      */
     public static function decodeOctal(string $text): string
     {
-        $parts = preg_split('/(\\\\[0-7]{3})/s', $text, -1, \PREG_SPLIT_NO_EMPTY | \PREG_SPLIT_DELIM_CAPTURE);
-        $text = '';
+        // Replace all double backslashes \\ with a special string
+        $text = strtr($text, ['\\\\' => '[**pdfparserdblslsh**]']);
 
-        foreach ($parts as $part) {
-            if (preg_match('/^\\\\[0-7]{3}$/', $part)) {
-                $text .= \chr(octdec(trim($part, '\\')));
-            } else {
-                $text .= $part;
-            }
-        }
+        // Now we can replace all octal codes without worrying about
+        // escaped backslashes
+        $text = preg_replace_callback('/\\\\([0-7]{1,3})/', function ($m) {
+            return \chr(octdec($m[1]));
+        }, $text);
 
-        return $text;
+        // Unescape any parentheses
+        $text = str_replace(['\\(', '\\)'], ['(', ')'], $text);
+
+        // Replace instances of the special string with a single backslash
+        return str_replace('[**pdfparserdblslsh**]', '\\', $text);
     }
 
     /**
@@ -361,18 +372,9 @@ class Font extends PDFObject
      */
     public static function decodeEntities(string $text): string
     {
-        $parts = preg_split('/(#\d{2})/s', $text, -1, \PREG_SPLIT_NO_EMPTY | \PREG_SPLIT_DELIM_CAPTURE);
-        $text = '';
-
-        foreach ($parts as $part) {
-            if (preg_match('/^#\d{2}$/', $part)) {
-                $text .= \chr(hexdec(trim($part, '#')));
-            } else {
-                $text .= $part;
-            }
-        }
-
-        return $text;
+        return preg_replace_callback('/#([0-9a-f]{2})/i', function ($m) {
+            return \chr(hexdec($m[1]));
+        }, $text);
     }
 
     /**
