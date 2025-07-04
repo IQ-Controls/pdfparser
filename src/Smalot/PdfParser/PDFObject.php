@@ -997,13 +997,13 @@ class PDFObject
                             || (false !== $current_position_td['y'] && (float) $y < (float) $current_position_td['y'])
                         ) {
                             // vertical offset
-                            $text .= "\n";
+                            $text[] = "\n";
                         } elseif (false !== $current_position_td['x'] && (float) $x > (float)
                             $current_position_td['x']
                         ) {
                             // horizontal offset
                             if (!$this->config->getIgnoreHorizontalOffset())
-                                $text .= $this->config->getHorizontalOffset();
+                                $text[] = $this->config->getHorizontalOffset();
                         }
                         $current_position_td = ['x' => $x, 'y' => $y];
                         break;
