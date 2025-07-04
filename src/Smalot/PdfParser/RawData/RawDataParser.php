@@ -43,16 +43,20 @@
 namespace Smalot\PdfParser\RawData;
 
 use Smalot\PdfParser\Config;
+use Smalot\PdfParser\Exception\EmptyPdfException;
+use Smalot\PdfParser\Exception\MissingPdfHeaderException;
 
 class RawDataParser
 {
     /**
-     * @var \Smalot\PdfParser\Config
+     * @var Config
      */
     private $config;
 
     /**
      * Configuration array.
+     *
+     * @var array<string,bool>
      */
     protected $cfg = [
         // if `true` ignore filter decoding errors
@@ -67,7 +71,7 @@ class RawDataParser
     /**
      * @param array $cfg Configuration array, default is []
      */
-    public function __construct($cfg = [], Config $config = null)
+    public function __construct($cfg = [], ?Config $config = null)
     {
         // merge given array with default values
         $this->cfg = array_merge($this->cfg, $cfg);
@@ -125,7 +129,7 @@ class RawDataParser
         // decode the stream
         $remaining_filters = [];
         foreach ($filters as $filter) {
-            if (\in_array($filter, $this->filterHelper->getAvailableFilters())) {
+            if (\in_array($filter, $this->filterHelper->getAvailableFilters(), true)) {
                 try {
                     $stream = $this->filterHelper->decodeFilter($filter, $stream, $this->config->getDecodeMemoryLimit());
                 } catch (\Exception $e) {
@@ -212,8 +216,11 @@ class RawDataParser
                 }
             }
             if (preg_match('/Prev[\s]+([0-9]+)/i', $trailer_data, $matches) > 0) {
-                // get previous xref
-                $xref = $this->getXrefData($pdfData, (int) $matches[1], $xref);
+                $offset = (int) $matches[1];
+                if (0 != $offset) {
+                    // get previous xref
+                    $xref = $this->getXrefData($pdfData, $offset, $xref);
+                }
             }
         } else {
             throw new \Exception('Unable to find trailer');
@@ -262,7 +269,8 @@ class RawDataParser
             if (
                 ('/' == $v[0])
                 && ('Type' == $v[1])
-                && (isset($sarr[$k + 1])
+                && (
+                    isset($sarr[$k + 1])
                     && '/' == $sarr[$k + 1][0]
                     && 'XRef' == $sarr[$k + 1][1]
                 )
@@ -288,7 +296,8 @@ class RawDataParser
                     if (
                         '/' == $vdc[0]
                         && 'Columns' == $vdc[1]
-                        && (isset($decpar[$kdc + 1])
+                        && (
+                            isset($decpar[$kdc + 1])
                             && 'numeric' == $decpar[$kdc + 1][0]
                         )
                     ) {
@@ -296,7 +305,8 @@ class RawDataParser
                     } elseif (
                         '/' == $vdc[0]
                         && 'Predictor' == $vdc[1]
-                        && (isset($decpar[$kdc + 1])
+                        && (
+                            isset($decpar[$kdc + 1])
                             && 'numeric' == $decpar[$kdc + 1][0]
                         )
                     ) {
@@ -406,10 +416,15 @@ class RawDataParser
             } else {
                 // number of bytes in a row
                 $rowlen = array_sum($wb);
-                // convert the stream into an array of integers
-                $sdata = unpack('C*', $xrefcrs[1][3][0]);
-                // split the rows
-                $ddata = array_chunk($sdata, $rowlen);
+                if (0 < $rowlen) {
+                    // convert the stream into an array of integers
+                    $sdata = unpack('C*', $xrefcrs[1][3][0]);
+                    // split the rows
+                    $ddata = array_chunk($sdata, $rowlen);
+                } else {
+                    // if the row length is zero, $ddata should be an empty array as well
+                    $ddata = [];
+                }
             }
 
             $sdata = [];
@@ -609,7 +624,7 @@ class RawDataParser
      *
      * @return array containing object type, raw value and offset to next object
      */
-    protected function getRawObject(string $pdfData, int $offset = 0, array $headerDic = null): array
+    protected function getRawObject(string $pdfData, int $offset = 0, ?array $headerDic = null): array
     {
         $objtype = ''; // object type to be returned
         $objval = ''; // object value to be returned
@@ -857,11 +872,21 @@ class RawDataParser
      */
     protected function getXrefData(string $pdfData, int $offset = 0, array $xref = []): array
     {
-        $startxrefPreg = preg_match(
-            '/[\r\n]startxref[\s]*[\r\n]+([0-9]+)[\s]*[\r\n]+%%EOF/i',
+        // If the $offset is currently pointed at whitespace, bump it
+        // forward until it isn't; affects loosely targetted offsets
+        // for the 'xref' keyword
+        // See: https://github.com/smalot/pdfparser/issues/673
+        $bumpOffset = $offset;
+        while (preg_match('/\s/', substr($pdfData, $bumpOffset, 1))) {
+            ++$bumpOffset;
+        }
+
+        // Find all startxref tables from this $offset forward
+        $startxrefPreg = preg_match_all(
+            '/(?<=[\r\n])startxref[\s]*[\r\n]+([0-9]+)[\s]*[\r\n]+%%EOF/i',
             $pdfData,
-            $matches,
-            \PREG_OFFSET_CAPTURE,
+            $startxrefMatches,
+            \PREG_SET_ORDER,
             $offset
         );
 
@@ -896,7 +921,8 @@ class RawDataParser
             // startxref found
             $startxref = $matches[1][0];
         } else {
-            throw new \Exception('Unable to find startxref');
+            // Use the next startxref from this $offset
+            $startxref = (int) $startxrefMatches[0][1];
         }
 
         if ($startxref > \strlen($pdfData)) {
@@ -932,18 +958,18 @@ class RawDataParser
      *
      * @return array array of parsed PDF document objects
      *
-     * @throws \Exception if empty PDF data given
-     * @throws \Exception if PDF data missing %PDF header
+     * @throws EmptyPdfException if empty PDF data given
+     * @throws MissingPdfHeaderException if PDF data missing `%PDF-` header
      */
     public function parseData(string $data): array
     {
         if (empty($data)) {
-            throw new \Exception('Empty PDF data given.');
+            throw new EmptyPdfException('Empty PDF data given.');
         }
 
         // find the pdf header starting position
         if (false === ($trimpos = strpos($data, '%PDF-'))) {
-            throw new \Exception('Invalid PDF data: missing %PDF header.');
+            throw new MissingPdfHeaderException('Invalid PDF data: Missing `%PDF-` header.');
         }
 
         // get PDF content string

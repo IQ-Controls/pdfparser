@@ -191,7 +191,7 @@ class Font extends PDFObject
             // Support for multiple bfchar sections
             if (preg_match_all('/beginbfchar(?P<sections>.*?)endbfchar/s', $content, $matches)) {
                 foreach ($matches['sections'] as $section) {
-                    $regexp = '/<(?P<from>[0-9A-F]+)> +<(?P<to>[0-9A-F]+)>[ \r\n]+/is';
+                    $regexp = '/<(?P<from>[0-9A-F]+)> *<(?P<to>[0-9A-F]+)>[ \r\n]+/is';
 
                     preg_match_all($regexp, $section, $matches);
 
@@ -216,45 +216,53 @@ class Font extends PDFObject
             // Support for multiple bfrange sections
             if (preg_match_all('/beginbfrange(?P<sections>.*?)endbfrange/s', $content, $matches)) {
                 foreach ($matches['sections'] as $section) {
-                    // Support for : <srcCode1> <srcCode2> <dstString>
-                    $regexp = '/<(?P<from>[0-9A-F]+)> *<(?P<to>[0-9A-F]+)> *<(?P<offset>[0-9A-F]+)>[ \r\n]+/is';
+                    /**
+                     * Regexp to capture <from>, <to>, and either <offset> or [...] items.
+                     * - (?P<from>...) Source range's start
+                     * - (?P<to>...)   Source range's end
+                     * - (?P<dest>...) Destination range's offset or each char code
+                     *                 Some PDF file has 2-byte Unicode values on new lines > added \r\n
+                     */
+                    $regexp = '/<(?P<from>[0-9A-F]+)> *<(?P<to>[0-9A-F]+)> *(?P<dest><[0-9A-F]+>|\[[\r\n<>0-9A-F ]+\])[ \r\n]+/is';
 
                     preg_match_all($regexp, $section, $matches);
 
                     foreach ($matches['from'] as $key => $from) {
                         $char_from = hexdec($from);
                         $char_to = hexdec($matches['to'][$key]);
-                        $offset = hexdec($matches['offset'][$key]);
+                        $dest = $matches['dest'][$key];
 
-                        for ($char = $char_from; $char <= $char_to; ++$char) {
-                            $this->table[$char] = self::uchr($char - $char_from + $offset);
-                        }
-                    }
+                        if (1 === preg_match('/^<(?P<offset>[0-9A-F]+)>$/i', $dest, $offset_matches)) {
+                            // Support for : <srcCode1> <srcCode2> <dstString>
+                            $offset = hexdec($offset_matches['offset']);
 
-                    // Support for : <srcCode1> <srcCodeN> [<dstString1> <dstString2> ... <dstStringN>]
-                    // Some PDF file has 2-byte Unicode values on new lines > added \r\n
-                    $regexp = '/<(?P<from>[0-9A-F]+)> *<(?P<to>[0-9A-F]+)> *\[(?P<strings>[\r\n<>0-9A-F ]+)\][ \r\n]+/is';
-
-                    preg_match_all($regexp, $section, $matches);
-
-                    foreach ($matches['from'] as $key => $from) {
-                        $char_from = hexdec($from);
-                        $strings = [];
-
-                        preg_match_all('/<(?P<string>[0-9A-F]+)> */is', $matches['strings'][$key], $strings);
-
-                        foreach ($strings['string'] as $position => $string) {
-                            $parts = preg_split(
-                                '/([0-9A-F]{4})/i',
-                                $string,
-                                0,
-                                \PREG_SPLIT_NO_EMPTY | \PREG_SPLIT_DELIM_CAPTURE
-                            );
-                            $text = '';
-                            foreach ($parts as $part) {
-                                $text .= self::uchr(hexdec($part));
+                            for ($char = $char_from; $char <= $char_to; ++$char) {
+                                $this->table[$char] = self::uchr($char - $char_from + $offset);
                             }
-                            $this->table[$char_from + $position] = $text;
+                        } else {
+                            // Support for : <srcCode1> <srcCodeN> [<dstString1> <dstString2> ... <dstStringN>]
+                            $strings = [];
+                            $matched = preg_match_all('/<(?P<string>[0-9A-F]+)> */is', $dest, $strings);
+                            if (false === $matched || 0 === $matched) {
+                                continue;
+                            }
+
+                            foreach ($strings['string'] as $position => $string) {
+                                $parts = preg_split(
+                                    '/([0-9A-F]{4})/i',
+                                    $string,
+                                    0,
+                                    \PREG_SPLIT_NO_EMPTY | \PREG_SPLIT_DELIM_CAPTURE
+                                );
+                                if (false === $parts) {
+                                    continue;
+                                }
+                                $text = '';
+                                foreach ($parts as $part) {
+                                    $text .= self::uchr(hexdec($part));
+                                }
+                                $this->table[$char_from + $position] = $text;
+                            }
                         }
                     }
                 }
@@ -279,7 +287,7 @@ class Font extends PDFObject
     /**
      * Calculate text width with data from header 'Widths'. If width of character is not found then character is added to missing array.
      */
-    public function calculateTextWidth(string $text, array &$missing = null): ?float
+    public function calculateTextWidth(string $text, ?array &$missing = null): ?float
     {
         $index_map = array_flip($this->table);
         $details = $this->getDetails();
@@ -287,8 +295,13 @@ class Font extends PDFObject
         // Usually, Widths key is set in $details array, but if it isn't use an empty array instead.
         $widths = $details['Widths'] ?? [];
 
-        // Widths array is zero indexed but table is not. We must map them based on FirstChar and LastChar
-        $width_map = array_flip(range($details['FirstChar'], $details['LastChar']));
+        /*
+         * Widths array is zero indexed but table is not. We must map them based on FirstChar and LastChar
+         *
+         * Note: Without the change you would see warnings in PHP 8.4 because the values of FirstChar or LastChar
+         *       can be null sometimes.
+         */
+        $width_map = array_flip(range((int) $details['FirstChar'], (int) $details['LastChar']));
 
         $width = null;
         $missing = [];
@@ -386,7 +399,7 @@ class Font extends PDFObject
      */
     public static function decodeUnicode(string $text): string
     {
-        if (preg_match('/^\xFE\xFF/i', $text)) {
+        if ("\xFE\xFF" === substr($text, 0, 2)) {
             // Strip U+FEFF byte order marker.
             $decode = substr($text, 2);
             $text = '';
@@ -411,16 +424,17 @@ class Font extends PDFObject
     /**
      * Decode text by commands array.
      */
-    public function decodeText(array $commands): string
+    public function decodeText(array $commands, float $fontFactor = 4): string
     {
         $word_position = 0;
         $words = [];
-        $font_space = $this->getFontSpaceLimit();
+        $font_space = $this->getFontSpaceLimit() * abs($fontFactor) / 4;
 
         foreach ($commands as $command) {
             switch ($command[PDFObject::TYPE]) {
                 case 'n':
-                    if ((float) trim($command[PDFObject::COMMAND]) < $font_space) {
+                    $offset = (float) trim($command[PDFObject::COMMAND]);
+                    if ($offset - (float) $font_space < 0) {
                         $word_position = \count($words);
                     }
                     continue 2;
@@ -451,9 +465,32 @@ class Font extends PDFObject
 
         foreach ($words as &$word) {
             $word = $this->decodeContent($word);
+            $word = str_replace("\t", ' ', $word);
         }
 
-        return implode(' ', $words);
+        // Remove internal "words" that are just spaces, but leave them
+        // if they are at either end of the array of words. This fixes,
+        // for   example,   lines   that   are   justified   to   fill
+        // a whole row.
+        for ($x = \count($words) - 2; $x >= 1; --$x) {
+            if ('' === trim($words[$x], ' ')) {
+                unset($words[$x]);
+            }
+        }
+        $words = array_values($words);
+
+        // Cut down on the number of unnecessary internal spaces by
+        // imploding the string on the null byte, and checking if the
+        // text includes extra spaces on either side. If so, merge
+        // where appropriate.
+        $words = implode("\x00\x00", $words);
+        $words = str_replace(
+            [" \x00\x00 ", "\x00\x00 ", " \x00\x00", "\x00\x00"],
+            ['  ', ' ', ' ', ' '],
+            $words
+        );
+
+        return $words;
     }
 
     /**
@@ -461,8 +498,14 @@ class Font extends PDFObject
      *
      * @param bool $unicode This parameter is deprecated and might be removed in a future release
      */
-    public function decodeContent(string $text, bool &$unicode = null): string
+    public function decodeContent(string $text, ?bool &$unicode = null): string
     {
+        // If this string begins with a UTF-16BE BOM, then decode it
+        // directly as Unicode
+        if ("\xFE\xFF" === substr($text, 0, 2)) {
+            return $this->decodeUnicode($text);
+        }
+
         if ($this->has('ToUnicode')) {
             return $this->decodeContentByToUnicodeCMapOrDescendantFonts($text);
         }
