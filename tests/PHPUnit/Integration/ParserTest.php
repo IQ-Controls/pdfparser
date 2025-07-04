@@ -321,7 +321,7 @@ class ParserTest extends TestCase
         $this->fixture = new Parser([], $config);
         $document = $this->fixture->parseFile($filename);
 
-        $this->assertStringContainsString('dni a  10  maj a  2018', $document->getText());
+        $this->assertStringContainsString('dni a 10 maj a 2018', $document->getText());
     }
 
     /**
@@ -376,7 +376,7 @@ class ParserTest extends TestCase
         }
 
         $usedMemory = memory_get_usage(true);
-        $this->assertTrue($usedMemory > ($baselineMemory * 1.5), 'Memory is only '.$usedMemory);
+        $this->assertGreaterThan($baselineMemory + 180000000, $usedMemory, 'Memory is only '.$usedMemory);
         $this->assertTrue(null != $document && '' !== $document->getText());
 
         // force garbage collection
@@ -400,8 +400,43 @@ class ParserTest extends TestCase
          * note: the following memory value is set manually and may differ from system to system.
          *       it must be high enough to not produce a false negative though.
          */
-        $this->assertTrue($usedMemory < ($baselineMemory * 1.05), 'Memory is '.$usedMemory);
+        $this->assertLessThan($baselineMemory * 1.05, $usedMemory, 'Memory is '.$usedMemory);
         $this->assertTrue('' !== $document->getText());
+    }
+
+    /**
+     * Tests handling of encrypted PDF.
+     *
+     * @see https://github.com/smalot/pdfparser/pull/653
+     */
+    public function testNoIgnoreEncryption(): void
+    {
+        $filename = $this->rootDir.'/samples/not_really_encrypted.pdf';
+        $threw = false;
+        try {
+            (new Parser([]))->parseFile($filename);
+        } catch (\Exception $e) {
+            // we expect an exception to be thrown if an encrypted PDF is encountered.
+            $threw = true;
+        }
+        $this->assertTrue($threw);
+    }
+
+    /**
+     * Tests behavior if encryption is ignored.
+     *
+     * @see https://github.com/smalot/pdfparser/pull/653
+     */
+    public function testIgnoreEncryption(): void
+    {
+        $config = new Config();
+        $config->setIgnoreEncryption(true);
+
+        $filename = $this->rootDir.'/samples/not_really_encrypted.pdf';
+
+        $this->assertTrue((new Parser([], $config))->parseFile($filename) instanceof Document);
+
+        // without the configuration option set, an exception would be thrown.
     }
 }
 

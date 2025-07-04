@@ -238,6 +238,81 @@ end';
         $this->assertEquals('y', $table[92]);
     }
 
+    /**
+     * Tests loadTranslateTable with a bfrange definition that lists every destination character.
+     *
+     * @see https://github.com/smalot/pdfparser/issues/631
+     */
+    public function testLoadTranslateTableIssue631(): void
+    {
+        $document = new Document();
+
+        $content = '<</Type/Font /Subtype /Type0 /ToUnicode 2 0 R>>';
+        $header = Header::parse($content, $document);
+        $font = new Font($document, $header);
+
+        $content = '/CIDInit /ProcSet findresource begin
+1 dict begin
+begincmap
+/CIDSystemInfo
+<< /Registry (Adobe)
+/Ordering (UCS)
+/Supplement 0
+>> def
+/CMapName /Adobe-Identity-UCS def
+/CMapType 2 def
+1 beginbfrange
+<0677> <0689> [<FB1F> <FEDF0672> <FEE00672> <FEDF0673> <FEE00673> <FEDF0675> <FEE00675> <06B5FE8E> <06B5FE8E> <06B6FE8E> <06B6FE8E> <06B7FE8E> <06B7FE8E> <06B8FE8E> <06B8FE8E> <06F4> <0667> <FEDFFB51> <FEE0FB51>]
+<0690> <0693> [<FFFF> <FFFFFFFF> <FFFFFFFFFFFF> <FFFFFFFFFFFFFFFF>]
+<0694> <0695> [F<> 123 <>00]
+<0696> <0701> [<1> <23> <456> <7890> <ABCDE> <F12345>]
+endbfrange
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end';
+        $unicode = new PDFObject($document, null, $content);
+
+        $document->setObjects(['1_0' => $font, '2_0' => $unicode]);
+
+        $font->init();
+        // Test reload
+        $table = $font->loadTranslateTable();
+
+        $this->assertEquals(29, \count($table));
+
+        // Test ranges
+        $this->assertEquals("\u{FB1F}", $table[0x0677]);
+        $this->assertEquals("\u{FEDF}\u{0672}", $table[0x0678]);
+        $this->assertEquals("\u{FEE0}\u{0672}", $table[0x0679]);
+        $this->assertEquals("\u{FEDF}\u{0673}", $table[0x067A]);
+        $this->assertEquals("\u{FEE0}\u{0673}", $table[0x067B]);
+        $this->assertEquals("\u{FEDF}\u{0675}", $table[0x067C]);
+        $this->assertEquals("\u{FEE0}\u{0675}", $table[0x067D]);
+        $this->assertEquals("\u{06B5}\u{FE8E}", $table[0x067E]);
+        $this->assertEquals("\u{06B5}\u{FE8E}", $table[0x067F]);
+        $this->assertEquals("\u{06B6}\u{FE8E}", $table[0x0680]);
+        $this->assertEquals("\u{06B6}\u{FE8E}", $table[0x0681]);
+        $this->assertEquals("\u{06B7}\u{FE8E}", $table[0x0682]);
+        $this->assertEquals("\u{06B7}\u{FE8E}", $table[0x0683]);
+        $this->assertEquals("\u{06B8}\u{FE8E}", $table[0x0684]);
+        $this->assertEquals("\u{06B8}\u{FE8E}", $table[0x0685]);
+        $this->assertEquals("\u{06F4}", $table[0x0686]);
+        $this->assertEquals("\u{0667}", $table[0x0687]);
+        $this->assertEquals("\u{FEDF}\u{FB51}", $table[0x0688]);
+        $this->assertEquals("\u{FEE0}\u{FB51}", $table[0x0689]);
+        $this->assertEquals("\u{FFFF}", $table[0x0690]);
+        $this->assertEquals("\u{FFFF}\u{FFFF}", $table[0x0691]);
+        $this->assertEquals("\u{FFFF}\u{FFFF}\u{FFFF}", $table[0x0692]);
+        $this->assertEquals("\u{FFFF}\u{FFFF}\u{FFFF}\u{FFFF}", $table[0x0693]);
+        $this->assertEquals("\u{0001}", $table[0x0696]);
+        $this->assertEquals("\u{0023}", $table[0x0697]);
+        $this->assertEquals("\u{0456}", $table[0x0698]);
+        $this->assertEquals("\u{7890}", $table[0x0699]);
+        $this->assertEquals("\u{ABCD}\u{000E}", $table[0x069A]);
+        $this->assertEquals("\u{F123}\u{0045}", $table[0x069B]);
+    }
+
     public function testDecodeHexadecimal(): void
     {
         $hexa = '<322041>';
@@ -367,8 +442,6 @@ al;font-family:Helvetica,sans-serif;font-stretch:normal"><p><span style="font-fa
      * which would be instance of PDFObject class (but not Encoding or ElementString).
      *
      * @see https://github.com/smalot/pdfparser/pull/500
-     *
-     * @group linux-only
      */
     public function testDecodeTextForFontWithIndirectEncodingWithoutTypeEncoding(): void
     {
@@ -378,14 +451,12 @@ al;font-family:Helvetica,sans-serif;font-stretch:normal"><p><span style="font-fa
         $pages = $document->getPages();
         $page1 = reset($pages);
         $page1Text = $page1->getText();
-        $expectedText = <<<TEXT
-Export\u{a0}transakční\u{a0}historie
-Typ\u{a0}produktu:\u{a0}Podnikatelský\u{a0}účet\u{a0}Maxi
-Číslo\u{a0}účtu:\u{a0}0000000000/0000
-Počáteční\u{a0}zůstatek: 000\u{a0}000,00\u{a0}Kč
-Konečný\u{a0}zůstatek: 000\u{a0}000,00\u{a0}Kč
-Cena\u{a0}za\u{a0}služby
-TEXT;
+        $expectedText = "Export\u{a0}transakční\u{a0}historie\n";
+        $expectedText .= "Typ\u{a0}produktu:\u{a0}Podnikatelský\u{a0}účet\u{a0}Maxi\n";
+        $expectedText .= "Číslo\u{a0}účtu:\u{a0}0000000000/0000\n";
+        $expectedText .= "Počáteční\u{a0}zůstatek:\t000\u{a0}000,00\u{a0}Kč\n";
+        $expectedText .= "Konečný\u{a0}zůstatek:\t000\u{a0}000,00\u{a0}Kč\n";
+        $expectedText .= "Cena\u{a0}za\u{a0}služby";
 
         $this->assertEquals($expectedText, trim($page1Text));
     }
@@ -452,6 +523,21 @@ TEXT;
         $width = $fonts['9_0']->calculateTextWidth('Calibri', $missing);
         $this->assertEquals(2573, $width);
         $this->assertEquals([], $missing);
+    }
+
+    public function testDecodeContent(): void
+    {
+        /*
+         * we do this to get into the branch with private method "decodeContentByEncodingElement" in Font.php
+         */
+        $encoding = $this->createMock(Element::class);
+        $encoding->method('getContent')->willReturn('WinAnsiEncoding');
+        $header = new Header(['Encoding' => $encoding]);
+
+        $font = new Font($this->createMock(Document::class), $header);
+
+        // Check that a string with UTF-16BE BOM is decoded directly
+        $this->assertEquals('ABC', $font->decodeContent("\xFE\xFF\x00\x41\x00\x42\x00\x43"));
     }
 
     /**

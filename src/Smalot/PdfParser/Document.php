@@ -33,6 +33,7 @@
 namespace Smalot\PdfParser;
 
 use Smalot\PdfParser\Encoding\PDFDocEncoding;
+use Smalot\PdfParser\Exception\MissingCatalogException;
 
 /**
  * Technical references :
@@ -287,7 +288,7 @@ class Document
             }
 
             // Only use this metadata if it's referring to a PDF
-            if (isset($metadata['dc:format']) && 'application/pdf' == $metadata['dc:format']) {
+            if (!isset($metadata['dc:format']) || 'application/pdf' == $metadata['dc:format']) {
                 // According to the XMP specifications: 'Conflict resolution
                 // for separate packets that describe the same resource is
                 // beyond the scope of this document.' - Section 6.1
@@ -336,12 +337,12 @@ class Document
         return null;
     }
 
-    public function hasObjectsByType(string $type, string $subtype = null): bool
+    public function hasObjectsByType(string $type, ?string $subtype = null): bool
     {
         return 0 < \count($this->getObjectsByType($type, $subtype));
     }
 
-    public function getObjectsByType(string $type, string $subtype = null): array
+    public function getObjectsByType(string $type, ?string $subtype = null): array
     {
         if (!isset($this->dictionary[$type])) {
             return [];
@@ -379,7 +380,7 @@ class Document
     /**
      * @return Page[]
      *
-     * @throws \Exception
+     * @throws MissingCatalogException
      */
     public function getPages()
     {
@@ -415,10 +416,10 @@ class Document
             return array_values($pages);
         }
 
-        throw new \Exception('Missing catalog.');
+        throw new MissingCatalogException('Missing catalog.');
     }
 
-    public function getText(int $pageLimit = null): string
+    public function getText(?int $pageLimit = null): string
     {
         $texts = [];
         $pages = $this->getPages();

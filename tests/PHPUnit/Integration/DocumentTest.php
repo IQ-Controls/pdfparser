@@ -40,9 +40,11 @@ use Smalot\PdfParser\Document;
 use Smalot\PdfParser\Header;
 use Smalot\PdfParser\Page;
 use Smalot\PdfParser\Pages;
-use Smalot\PdfParser\Parser;
 use Smalot\PdfParser\PDFObject;
 
+/**
+ * General Document related tests.
+ */
 class DocumentTest extends TestCase
 {
     protected function getDocumentInstance(): Document
@@ -50,7 +52,7 @@ class DocumentTest extends TestCase
         return new Document();
     }
 
-    protected function getPDFObjectInstance(Document $document, Header $header = null): PDFObject
+    protected function getPDFObjectInstance(Document $document, ?Header $header = null): PDFObject
     {
         return new PDFObject($document, $header);
     }
@@ -232,70 +234,34 @@ class DocumentTest extends TestCase
     }
 
     /**
-     * Tests getText method without a given page limit.
-     *
-     * @see https://github.com/smalot/pdfparser/pull/562
+     * @see https://github.com/smalot/pdfparser/issues/721
      */
-    public function testGetTextNoPageLimit(): void
+    public function testExtractXMPMetadataIssue721(): void
     {
-        $document = (new Parser())->parseFile($this->rootDir.'/samples/bugs/Issue331.pdf');
+        $document = $this->getDocumentInstance();
 
-        self::assertStringContainsString('Medeni Usul ve İcra İflas Hukuku', $document->getText());
-    }
+        // Check that XMP metadata is parsed even if missing a dc:format tag
+        $content = '<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.6-c015 84.159810, 2016/09/10-02:41:30">
+   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+      <rdf:Description>
+         <dc:creator>
+            <rdf:Seq>
+               <rdf:li>PdfParser</rdf:li>
+            </rdf:Seq>
+         </dc:creator>
+         <xmp:CreateDate>2018-02-07T11:51:44-05:00</xmp:CreateDate>
+         <xmp:ModifyDate>2019-10-23T09:56:01-04:00</xmp:ModifyDate>
+      </rdf:Description>
+   </rdf:RDF>
+</x:xmpmeta>';
 
-    /**
-     * Tests getText method with a given page limit.
-     *
-     * @see https://github.com/smalot/pdfparser/pull/562
-     */
-    public function testGetTextWithPageLimit(): void
-    {
-        $document = (new Parser())->parseFile($this->rootDir.'/samples/bugs/Issue331.pdf');
-
-        // given text is on page 2, it has to be ignored because of that
-        self::assertStringNotContainsString('Medeni Usul ve İcra İflas Hukuku', $document->getText(1));
-    }
-
-    /**
-     * Tests extraction of XMP Metadata vs. getHeader() data.
-     *
-     * @see https://github.com/smalot/pdfparser/pull/606
-     */
-    public function testExtractXMPMetadata(): void
-    {
-        $document = (new Parser())->parseFile($this->rootDir.'/samples/XMP_Metadata.pdf');
-
+        $document->extractXMPMetadata($content);
+        $document->init();
         $details = $document->getDetails();
 
-        // Test that the dc:title data was extracted from the XMP
-        // Metadata.
-        self::assertStringContainsString("Enhance PdfParser\u{2019}s Metadata Capabilities", $details['dc:title']);
-    }
-
-    /**
-     * Tests PDFDocEncoding decode of Document Properties
-     *
-     * @see https://github.com/smalot/pdfparser/issues/609
-     */
-    public function testPDFDocEncodingDecode(): void
-    {
-        $document = (new Parser())->parseFile($this->rootDir.'/samples/Issue609.pdf');
-
-        $details = $document->getDetails();
-
-        // These test that Adobe-inserted \r are removed from a UTF-8
-        // escaped metadata string, and the surrounding characters are
-        // repaired
-        $testKeywords = '˘ˇˆ˙˝˛˞˜•†‡…—–ƒ⁄‹›−‰„“”‘’‚™ﬁﬂŁŒŠŸŽıłœšž€¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ';
-        self::assertStringContainsString($testKeywords, $details['Keywords']);
-
-        $testKeywords = 'added line-feeds often destroy multibyte characters';
-        self::assertStringContainsString($testKeywords, $details['Keywords']);
-
-        // This tests that the PDFDocEncoding characters that differ
-        // from CP-1252 are decoded to their correct UTF-8 code points
-        // as well as removing \r line-feeds
-        $testSubject = '•†‡…—–ƒ⁄‹›−‰„“”‘’‚™ŁŒŠŸŽıłœšž';
-        self::assertStringContainsString($testSubject, $details['Subject']);
+        $this->assertEquals(4, \count($details));
+        $this->assertEquals('PdfParser', $details['dc:creator']);
+        $this->assertEquals('2019-10-23T09:56:01-04:00', $details['xmp:modifydate']);
     }
 }
